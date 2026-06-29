@@ -15,11 +15,16 @@ import dashboardRoutes from "./routes/dashboard.routes.js";
 
 const app = express();
 
-app.use(
-  cors({
-    origin: process.env.CLIENT_ORIGIN || "http://localhost:5173",
-  })
-);
+// Allow the configured client origin plus any localhost port in dev
+// (Vite may fall back to 5174, 5175… if 5173 is busy).
+const allowedOrigin = (origin, cb) => {
+  const ok =
+    !origin ||
+    origin === process.env.CLIENT_ORIGIN ||
+    /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin);
+  cb(ok ? null : new Error("Not allowed by CORS"), ok);
+};
+app.use(cors({ origin: allowedOrigin }));
 app.use(express.json());
 
 app.get("/api/health", (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
