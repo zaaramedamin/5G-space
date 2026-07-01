@@ -17,9 +17,16 @@ export const listAudit = asyncHandler(async (req, res) => {
     }
   }
 
+  const { page, limit: lim } = req.query;
+  const limit = Math.min(Number(lim) || 50, 200);
+  const currentPage = Math.max(Number(page) || 1, 1);
+  const skip = (currentPage - 1) * limit;
+
+  const total = await AuditLog.countDocuments(filter);
   const logs = await AuditLog.find(filter)
     .populate({ path: "user", select: "name email role" })
     .sort({ createdAt: -1 })
-    .limit(500);
-  res.json(logs);
+    .skip(skip)
+    .limit(limit);
+  res.json({ data: logs, total, page: currentPage, pages: Math.ceil(total / limit) || 1 });
 });

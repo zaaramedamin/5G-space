@@ -3,9 +3,9 @@ import Reservation from "../models/Reservation.js";
 import { logAction } from "../services/audit.service.js";
 import { asyncHandler } from "../utils/helpers.js";
 
-// GET /api/clients?search=&cin=  → list with reservation counts
+// GET /api/clients?search=&cin=&page=&limit=  → paginated list with reservation counts
 export const listClients = asyncHandler(async (req, res) => {
-  const { search, cin } = req.query;
+  const { search, cin, page, limit: lim } = req.query;
   const filter = {};
   if (cin) filter.cin = cin.trim();
   if (search) {
@@ -13,14 +13,21 @@ export const listClients = asyncHandler(async (req, res) => {
     filter.$or = [{ name: rx }, { phone: rx }, { cin: rx }];
   }
 
-  const clients = await Client.find(filter).sort({ name: 1 }).lean();
+  const limit = Math.min(Number(lim) || 25, 200);
+  const currentPage = Math.max(Number(page) || 1, 1);
+  const skip = (currentPage - 1) * limit;
 
-  // Attach reservation counts (reservations link to clients by CIN).
+  const total = await Client.countDocuments(filter);
+  const clients = await Client.find(filter).sort({ name: 1 }).skip(skip).limit(limit).lean();
+
   const counts = await Reservation.aggregate([
     { $group: { _id: "$client.cin", count: { $sum: 1 } } },
   ]);
   const byCin = Object.fromEntries(counts.map((c) => [c._id, c.count]));
-  res.json(clients.map((c) => ({ ...c, reservations_count: byCin[c.cin] || 0 })));
+  res.json({
+    data: clients.map((c) => ({ ...c, reservations_count: byCin[c.cin] || 0 })),
+    total, page: currentPage, pages: Math.ceil(total / limit) || 1,
+  });
 });
 
 // GET /api/clients/:id  → detail with full reservation history

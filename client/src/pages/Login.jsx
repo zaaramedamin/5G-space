@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "../hooks/useAuth.js";
-import { apiError } from "../api/axiosInstance.js";
+
 
 export default function Login() {
   const { login, isAuthenticated, loading } = useAuth();
@@ -22,7 +22,21 @@ export default function Login() {
       await login(email, password);
       navigate("/", { replace: true });
     } catch (err) {
-      setError(apiError(err, "Connexion impossible."));
+      const status = err?.response?.status;
+      const serverMsg = err?.response?.data?.message;
+      if (!err.response && (err.code === "ERR_NETWORK" || err.code === "ECONNREFUSED" || !navigator.onLine)) {
+        setError("Impossible de joindre le serveur. Vérifiez votre connexion Wi-Fi ou contactez l'administrateur.");
+      } else if (status === 401) {
+        setError("Email ou mot de passe incorrect. Vérifiez vos identifiants.");
+      } else if (status === 403) {
+        setError("Votre compte est désactivé. Contactez l'administrateur.");
+      } else if (status === 422) {
+        setError("Email invalide ou mot de passe manquant.");
+      } else if (status >= 500) {
+        setError("Le serveur rencontre un problème. Réessayez dans quelques instants.");
+      } else {
+        setError(serverMsg || "Connexion impossible. Réessayez.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -34,8 +48,9 @@ export default function Login() {
         initial={{ opacity: 0, y: 24, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ type: "spring", stiffness: 260, damping: 24 }}>
-        <div className="login-logo"><span className="app-brand-mark" style={{ width: 42, height: 42 }}>5G</span> 5G Space</div>
-        <div className="login-sub">Gestion des espaces · Bizerte</div>
+        <div className="login-logo">
+          <img src="/logo-5gspace.png" alt="5G Space" className="login-logo-img" />
+        </div>
 
         {error && <div className="alert alert-danger py-2">{error}</div>}
 

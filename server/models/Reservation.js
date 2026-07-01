@@ -25,7 +25,7 @@ const reservationSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["confirmed", "checked_in", "checked_out", "cancelled"],
+      enum: ["confirmed", "checked_in", "checked_out", "cancelled", "no_show"],
       default: "confirmed",
     },
     actual_end_time: { type: String }, // recorded at check-out
@@ -34,6 +34,8 @@ const reservationSchema = new mongoose.Schema(
     checkout_by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     cancel_reason: { type: String },
     notes: { type: String },
+    // Set on every occurrence generated from one recurring booking.
+    recurrence_group: { type: String, index: true },
   },
   { timestamps: true }
 );

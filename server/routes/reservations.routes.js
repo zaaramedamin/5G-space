@@ -9,6 +9,7 @@ import {
   checkout,
   cancel,
   updatePayment,
+  ical,
 } from "../controllers/reservations.controller.js";
 import { verifyToken } from "../middleware/auth.middleware.js";
 
@@ -28,6 +29,7 @@ const createRules = [
 router.get("/", listReservations);
 router.post("/", createRules, createReservation);
 router.get("/:id", getReservation);
+router.get("/:id/ical", ical);
 router.put("/:id", updateReservation);
 router.post("/:id/checkin", checkin);
 router.post("/:id/checkout", checkout);

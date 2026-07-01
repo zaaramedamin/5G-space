@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "../hooks/useAuth.js";
 import { lookupByCin } from "../api/clients.api.js";
@@ -12,9 +12,10 @@ const emptyForm = () => ({
   name: "", phone: "", cin: "", email: "",
   room: "", date: todayISO(), start_time: "09:00", end_time: "10:00",
   acompte_paye: 0, notes: "",
+  recurring: false, recurrence_until: "",
 });
 
-export default function ReservationModal({ open, onClose, onSaved, rooms, reservation }) {
+export default function ReservationModal({ open, onClose, onSaved, rooms, reservation, defaultRoom }) {
   const { user } = useAuth();
   const editing = Boolean(reservation);
 
@@ -27,11 +28,19 @@ export default function ReservationModal({ open, onClose, onSaved, rooms, reserv
           start_time: reservation.start_time, end_time: reservation.end_time,
           acompte_paye: reservation.acompte_paye || 0, notes: reservation.notes || "",
         }
-      : emptyForm()
+      : { ...emptyForm(), room: defaultRoom || "" }
   );
   const [blacklistWarn, setBlacklistWarn] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open && !editing) {
+      setForm({ ...emptyForm(), room: defaultRoom || "" });
+      setError("");
+      setBlacklistWarn("");
+    }
+  }, [open, defaultRoom, editing]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const selectedRoom = rooms.find((r) => r._id === form.room);
@@ -63,12 +72,24 @@ export default function ReservationModal({ open, onClose, onSaved, rooms, reserv
       room: form.room, date: form.date, start_time: form.start_time, end_time: form.end_time,
       acompte_paye: Number(form.acompte_paye) || 0, notes: form.notes,
     };
+    if (!editing && form.recurring && form.recurrence_until) {
+      payload.recurrence = { frequency: "weekly", until: form.recurrence_until };
+    }
     try {
-      if (editing) await updateReservation(reservation._id, payload);
-      else await createReservation(payload);
-      onSaved();
+      if (editing) { await updateReservation(reservation._id, payload); onSaved(); }
+      else { const result = await createReservation(payload); onSaved(result); }
     } catch (err) {
-      setError(apiError(err, "Enregistrement impossible."));
+      const code = err?.response?.status;
+      const msg  = err?.response?.data?.message;
+      if (code === 409) {
+        setError(`Créneau non disponible : cette salle est déjà réservée sur cet horaire. Choisissez un autre créneau.`);
+      } else if (code === 400 || code === 422) {
+        setError(msg || "Certains champs sont invalides. Vérifiez les informations saisies.");
+      } else if (!navigator.onLine || err.code === "ERR_NETWORK") {
+        setError("Impossible de joindre le serveur. Vérifiez votre connexion Internet.");
+      } else {
+        setError(msg || "Enregistrement impossible. Réessayez dans quelques instants.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -112,6 +133,26 @@ export default function ReservationModal({ open, onClose, onSaved, rooms, reserv
                 <div className="col-md-6"><label className="form-label">Début *</label><input className="form-control" type="time" required value={form.start_time} onChange={set("start_time")} /></div>
                 <div className="col-md-6"><label className="form-label">Fin *</label><input className="form-control" type="time" required value={form.end_time} onChange={set("end_time")} /></div>
               </div>
+
+              {!editing && (
+                <div className="recur-box mt-3">
+                  <div className="form-check form-switch mb-0">
+                    <input className="form-check-input" type="checkbox" id="recurToggle" checked={form.recurring}
+                      onChange={(e) => setForm((f) => ({ ...f, recurring: e.target.checked }))} />
+                    <label className="form-check-label" htmlFor="recurToggle"><i className="bi bi-arrow-repeat me-1" />Répéter chaque semaine (même jour &amp; horaire)</label>
+                  </div>
+                  {form.recurring && (
+                    <div className="row g-2 mt-1 align-items-end">
+                      <div className="col-sm-5">
+                        <label className="form-label">Jusqu'au *</label>
+                        <input className="form-control" type="date" required={form.recurring} min={form.date}
+                          value={form.recurrence_until} onChange={set("recurrence_until")} />
+                      </div>
+                      <div className="col-sm-7"><div className="recur-hint"><i className="bi bi-info-circle me-1" />Une réservation sera créée chaque semaine ; les créneaux en conflit sont ignorés automatiquement.</div></div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="d-flex align-items-center gap-3 bg-light rounded-3 p-3 my-3">
                 <span><span className="muted">Durée :</span> <strong>{preview.dur > 0 ? `${preview.dur} h` : "—"}</strong></span>

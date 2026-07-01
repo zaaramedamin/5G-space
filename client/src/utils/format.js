@@ -26,6 +26,7 @@ const RES_STATUS = {
   checked_in: { label: "Check-in", cls: "text-bg-success" },
   checked_out: { label: "Terminée", cls: "text-bg-secondary" },
   cancelled: { label: "Annulée", cls: "text-bg-danger" },
+  no_show: { label: "No-show", cls: "text-bg-dark" },
 };
 export const reservationStatusBadge = (s) => RES_STATUS[s] || { label: s, cls: "text-bg-secondary" };
 

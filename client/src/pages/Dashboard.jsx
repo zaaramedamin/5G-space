@@ -1,36 +1,59 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { usePolling } from "../hooks/usePolling.js";
+import { useRooms } from "../hooks/useRooms.js";
+import { useToast } from "../context/ToastContext.jsx";
 import { getRoomsStatus, getStats } from "../api/dashboard.api.js";
 import { getReservations } from "../api/reservations.api.js";
 import RoomCard from "../components/RoomCard.jsx";
+import ReservationModal from "../components/ReservationModal.jsx";
 import { formatTND, todayISO, paymentBadge } from "../utils/format.js";
 import { toMinutes } from "../utils/timeClient.js";
 import { staggerContainer, fadeUpItem } from "../utils/motion.js";
 
 const TILES = [
-  { key: "total_reservations", label: "Réservations aujourd'hui", icon: "bi-card-list", bg: "#dbeafe", fg: "#2563eb", money: false },
-  { key: "rooms_occupied", label: "Salles occupées", icon: "bi-door-open-fill", bg: "#fef3c7", fg: "#d97706", money: false },
-  { key: "revenue_collected", label: "Revenu encaissé (jour)", icon: "bi-cash-coin", bg: "#dcfce7", fg: "#16a34a", money: true },
-  { key: "pending_amount", label: "Montant en attente", icon: "bi-hourglass-split", bg: "#fee2e2", fg: "#dc2626", money: true },
+  { key: "total_reservations", label: "Réservations aujourd'hui", icon: "bi-card-list",       bg: "#dbeafe", fg: "#2563eb", money: false },
+  { key: "rooms_occupied",     label: "Salles occupées",          icon: "bi-door-open-fill",   bg: "#fef3c7", fg: "#d97706", money: false },
+  { key: "revenue_collected",  label: "Revenu encaissé (jour)",   icon: "bi-cash-coin",        bg: "#dcfce7", fg: "#16a34a", money: true  },
+  { key: "pending_amount",     label: "Montant en attente",       icon: "bi-hourglass-split",  bg: "#fee2e2", fg: "#dc2626", money: true  },
 ];
 
 export default function Dashboard() {
-  const { data: rooms, loading } = usePolling(getRoomsStatus, 30000);
-  const { data: stats } = usePolling(getStats, 30000);
+  const { data: rooms, loading, refresh: refreshRooms } = usePolling(getRoomsStatus, 30000);
+  const { data: stats, refresh: refreshStats } = usePolling(getStats, 30000);
+  const { rooms: fullRooms } = useRooms();
+  const { addToast } = useToast();
   const [upcoming, setUpcoming] = useState([]);
+  const [bookRoom, setBookRoom] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    getReservations({ date: todayISO(), status: "confirmed" })
-      .then((list) => {
+  const loadUpcoming = useCallback(() => {
+    return getReservations({ date: todayISO(), status: "confirmed", limit: 100 })
+      .then((res) => {
+        const list = res?.data || res || [];
         const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
         setUpcoming(
-          list.filter((r) => { const s = toMinutes(r.start_time); return s >= nowMin && s <= nowMin + 180; })
+          list
+            .filter((r) => { const s = toMinutes(r.start_time); return s >= nowMin && s <= nowMin + 180; })
             .sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time))
         );
       })
       .catch(() => setUpcoming([]));
-  }, [stats]);
+  }, []);
+
+  useEffect(() => { loadUpcoming(); }, [stats, loadUpcoming]);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await Promise.all([refreshRooms(), refreshStats(), loadUpcoming()]);
+      addToast("success", "Données actualisées.");
+    } catch {
+      addToast("error", "Échec de l'actualisation.");
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   return (
     <div className="page">
@@ -39,6 +62,9 @@ export default function Dashboard() {
           <div className="page-title">Tableau de bord</div>
           <div className="page-sub">Vue d'ensemble en temps réel de vos espaces</div>
         </div>
+        <button className="btn btn-light d-inline-flex align-items-center gap-2" onClick={handleRefresh} disabled={refreshing}>
+          <i className={`bi bi-arrow-clockwise${refreshing ? " spin" : ""}`} /> Actualiser
+        </button>
       </div>
 
       <motion.div className="stats" variants={staggerContainer} initial="initial" animate="animate">
@@ -60,7 +86,7 @@ export default function Dashboard() {
         <motion.div className="room-grid" variants={staggerContainer} initial="initial" animate="animate">
           {rooms?.map((room) => (
             <motion.div key={room.room_id} variants={fadeUpItem} whileHover={{ y: -4 }}>
-              <RoomCard room={room} />
+              <RoomCard room={room} onBook={(r) => setBookRoom(r)} />
             </motion.div>
           ))}
         </motion.div>
@@ -91,6 +117,16 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {bookRoom && (
+        <ReservationModal
+          open
+          rooms={fullRooms}
+          defaultRoom={bookRoom.room_id}
+          onClose={() => setBookRoom(null)}
+          onSaved={(result) => { setBookRoom(null); addToast("success", result?.recurring ? `${result.created_count} réservations créées.` : "Réservation créée avec succès."); }}
+        />
+      )}
     </div>
   );
 }

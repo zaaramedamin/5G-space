@@ -7,6 +7,7 @@ const roomSchema = new mongoose.Schema(
     tarif_horaire: { type: Number, default: 10 },
     description: { type: String, default: "" },
     color_tag: { type: String, default: "#3b82f6" },
+    amenities: { type: [String], default: [] },
     is_active: { type: Boolean, default: true },
   },
   { timestamps: true }

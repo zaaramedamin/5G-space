@@ -16,8 +16,8 @@ export const createRoom = asyncHandler(async (req, res) => {
   if (!errors.isEmpty()) {
     return res.status(422).json({ message: "Données invalides.", errors: errors.array() });
   }
-  const { name, capacity, tarif_horaire, description, color_tag } = req.body;
-  const room = await Room.create({ name, capacity, tarif_horaire, description, color_tag });
+  const { name, capacity, tarif_horaire, description, color_tag, amenities } = req.body;
+  const room = await Room.create({ name, capacity, tarif_horaire, description, color_tag, amenities });
 
   await logAction(req.user._id, req.user.name, "CREATE_ROOM", "room", room._id, room.toObject());
   res.status(201).json(room);
@@ -28,7 +28,7 @@ export const updateRoom = asyncHandler(async (req, res) => {
   const room = await Room.findById(req.params.id);
   if (!room) return res.status(404).json({ message: "Salle introuvable." });
 
-  const fields = ["name", "capacity", "tarif_horaire", "description", "color_tag", "is_active"];
+  const fields = ["name", "capacity", "tarif_horaire", "description", "color_tag", "amenities", "is_active"];
   const before = room.toObject();
   for (const f of fields) {
     if (req.body[f] !== undefined) room[f] = req.body[f];

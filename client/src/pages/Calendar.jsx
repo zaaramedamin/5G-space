@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRooms } from "../hooks/useRooms.js";
+import { useIsMobile } from "../hooks/useIsMobile.js";
 import { getReservations } from "../api/reservations.api.js";
 import DayTimeGrid from "../components/DayTimeGrid.jsx";
 import CalendarGrid from "../components/CalendarGrid.jsx";
+import AgendaView from "../components/AgendaView.jsx";
 import ReservationModal from "../components/ReservationModal.jsx";
 import Modal from "../components/Modal.jsx";
+import { getReservationIcal } from "../api/reservations.api.js";
 import { reservationStatusBadge, paymentBadge, formatTND } from "../utils/format.js";
+import { generateReceipt } from "../utils/receipt.js";
 
 function startOfWeek(date) {
   const d = new Date(date);
@@ -18,13 +22,18 @@ const addDays = (date, n) => { const d = new Date(date); d.setDate(d.getDate() +
 
 export default function Calendar() {
   const { rooms } = useRooms();
+  const isMobile = useIsMobile();
   const [view, setView] = useState("day");
   const [cursor, setCursor] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; });
   const [reservations, setReservations] = useState([]);
   const [selected, setSelected] = useState(null);
   const [editing, setEditing] = useState(null);
 
-  function load() { getReservations().then(setReservations).catch(() => setReservations([])); }
+  function load() {
+    getReservations({ limit: 200 })
+      .then((res) => setReservations(Array.isArray(res) ? res : (res.data || [])))
+      .catch(() => setReservations([]));
+  }
   useEffect(load, []);
 
   const weekDays = useMemo(() => {
@@ -35,6 +44,17 @@ export default function Calendar() {
   const shift = (n) => setCursor((c) => addDays(c, view === "day" ? n : n * 7));
   const goToday = () => { const d = new Date(); d.setHours(0, 0, 0, 0); setCursor(d); };
   const pickDay = (d) => { setCursor(new Date(d)); setView("day"); };
+
+  async function addToCalendar(r) {
+    try {
+      const blob = await getReservationIcal(r._id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `${r.ref || "reservation"}.ics`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch { /* ignore */ }
+  }
 
   const dayLabel = cursor.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   const weekLabel = `${weekDays[0].toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })} – ${weekDays[6].toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}`;
@@ -52,20 +72,24 @@ export default function Calendar() {
             <button className={view === "week" ? "active" : ""} onClick={() => setView("week")}>Semaine</button>
           </div>
           <div className="seg">
-            <button onClick={() => shift(-1)}><i className="bi bi-chevron-left" /></button>
-            <button onClick={goToday}>Aujourd'hui</button>
-            <button onClick={() => shift(1)}><i className="bi bi-chevron-right" /></button>
+            <button onClick={() => shift(-1)} title={view === "day" ? "Jour précédent" : "Semaine précédente"}><i className="bi bi-chevron-left" /></button>
+            <button onClick={goToday}>{view === "day" ? "Aujourd'hui" : "Cette semaine"}</button>
+            <button onClick={() => shift(1)} title={view === "day" ? "Jour suivant" : "Semaine suivante"}><i className="bi bi-chevron-right" /></button>
           </div>
         </div>
       </div>
 
-      {view === "day"
-        ? <DayTimeGrid rooms={rooms} reservations={reservations} day={cursor} onSelect={setSelected} />
-        : <CalendarGrid rooms={rooms} reservations={reservations} days={weekDays} onSelect={setSelected} onPickDay={pickDay} />}
+      {isMobile
+        ? <AgendaView rooms={rooms} reservations={reservations} days={view === "day" ? [cursor] : weekDays} onSelect={setSelected} />
+        : view === "day"
+          ? <DayTimeGrid rooms={rooms} reservations={reservations} day={cursor} onSelect={setSelected} />
+          : <CalendarGrid rooms={rooms} reservations={reservations} days={weekDays} onSelect={setSelected} onPickDay={pickDay} />}
 
       <Modal open={Boolean(selected)} onClose={() => setSelected(null)} title={selected?.ref} maxWidth={460}
         footer={selected && (
           <>
+            <button className="btn btn-light" onClick={() => generateReceipt(selected)}><i className="bi bi-filetype-pdf me-1" />Reçu PDF</button>
+            <button className="btn btn-light" onClick={() => addToCalendar(selected)}><i className="bi bi-calendar-plus me-1" />Agenda</button>
             {selected.status === "confirmed" && (
               <button className="btn btn-primary" onClick={() => { setEditing(selected); setSelected(null); }}><i className="bi bi-pencil me-1" />Modifier</button>
             )}

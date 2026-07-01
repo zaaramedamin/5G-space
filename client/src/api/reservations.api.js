@@ -12,3 +12,5 @@ export const cancelReservation = (id, cancel_reason) =>
   api.post(`/reservations/${id}/cancel`, { cancel_reason }).then((r) => r.data);
 export const updatePayment = (id, data) =>
   api.patch(`/reservations/${id}/payment`, data).then((r) => r.data);
+export const getReservationIcal = (id) =>
+  api.get(`/reservations/${id}/ical`, { responseType: "blob" }).then((r) => r.data);

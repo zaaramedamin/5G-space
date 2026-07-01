@@ -2,7 +2,53 @@ import { useEffect, useState } from "react";
 import { getRooms, createRoom, updateRoom, deleteRoom } from "../api/rooms.api.js";
 import { getUsers, createUser, updateUser, deactivateUser } from "../api/users.api.js";
 import { apiError } from "../api/axiosInstance.js";
+import { useToast } from "../context/ToastContext.jsx";
+import PromptModal from "../components/PromptModal.jsx";
+import ConfirmModal from "../components/ConfirmModal.jsx";
+import Modal from "../components/Modal.jsx";
 import { formatTND } from "../utils/format.js";
+import { AMENITIES, amenityIcon } from "../utils/amenities.js";
+
+const ROOM_COLORS = [
+  "#4f46e5", "#0ea5e9", "#22c55e", "#f59e0b",
+  "#ef4444", "#8b5cf6", "#f97316",
+  "#ec4899","#14b8a6",
+];
+
+function SwatchPicker({ value, onChange }) {
+  return (
+    <div className="swatch-row">
+      {ROOM_COLORS.map((c) => (
+        <button
+          key={c}
+          type="button"
+          className={`swatch-btn${value === c ? " selected" : ""}`}
+          style={{ background: c }}
+          onClick={() => onChange(c)}
+          title={c}
+        />
+      ))}
+    </div>
+  );
+}
+
+function AmenityPicker({ value = [], onChange }) {
+  const toggle = (k) => onChange(value.includes(k) ? value.filter((x) => x !== k) : [...value, k]);
+  return (
+    <div className="amenity-row">
+      {AMENITIES.map((a) => (
+        <button
+          key={a.key}
+          type="button"
+          className={`amenity-chip${value.includes(a.key) ? " selected" : ""}`}
+          onClick={() => toggle(a.key)}
+        >
+          <i className={`bi ${a.icon}`} /> {a.key}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const TABS = [
   { key: "rooms", label: "Salles", icon: "bi-door-closed" },
@@ -27,8 +73,8 @@ export default function Settings() {
           </div>
         ))}
       </div>
-      {tab === "rooms" && <RoomsTab />}
-      {tab === "staff" && <StaffTab />}
+      {tab === "rooms"  && <RoomsTab />}
+      {tab === "staff"  && <StaffTab />}
       {tab === "tarifs" && <TarifsTab />}
     </div>
   );
@@ -36,33 +82,51 @@ export default function Settings() {
 
 /* ---------------- Rooms ---------------- */
 function RoomsTab() {
+  const { addToast } = useToast();
   const [rooms, setRooms] = useState([]);
-  const [form, setForm] = useState({ name: "", capacity: 4, tarif_horaire: 10, color_tag: "#4f46e5", description: "" });
-  const [error, setError] = useState("");
+  const [form, setForm]   = useState({ name: "", capacity: 4, tarif_horaire: 10, color_tag: "#4f46e5", description: "", amenities: [] });
+  const [renameCtx, setRenameCtx]     = useState(null);
+  const [deactivateCtx, setDeactivateCtx] = useState(null);
+  const [reactivateCtx, setReactivateCtx] = useState(null);
+  const [amenCtx, setAmenCtx] = useState(null);
+  const [amenDraft, setAmenDraft] = useState([]);
+
   const load = () => getRooms(true).then(setRooms).catch(() => setRooms([]));
   useEffect(() => { load(); }, []);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   async function add(e) {
-    e.preventDefault(); setError("");
+    e.preventDefault();
     try {
       await createRoom({ ...form, capacity: Number(form.capacity), tarif_horaire: Number(form.tarif_horaire) });
-      setForm({ name: "", capacity: 4, tarif_horaire: 10, color_tag: "#4f46e5", description: "" });
+      setForm({ name: "", capacity: 4, tarif_horaire: 10, color_tag: "#4f46e5", description: "", amenities: [] });
       load();
-    } catch (err) { setError(apiError(err)); }
+      addToast("success", "Salle ajoutée.");
+    } catch (err) { addToast("error", apiError(err)); }
   }
-  async function toggleActive(r) {
-    try { r.is_active ? await deleteRoom(r._id) : await updateRoom(r._id, { is_active: true }); load(); }
-    catch (err) { setError(apiError(err)); }
+
+  function openAmen(r) { setAmenDraft(r.amenities || []); setAmenCtx(r); }
+  async function doSaveAmen() {
+    try { await updateRoom(amenCtx._id, { amenities: amenDraft }); setAmenCtx(null); load(); addToast("success", "Équipements mis à jour."); }
+    catch (err) { addToast("error", apiError(err)); }
   }
-  async function rename(r) {
-    const name = window.prompt("Nom de la salle :", r.name);
-    if (name && name.trim()) { await updateRoom(r._id, { name: name.trim() }); load(); }
+
+  async function doToggleActive(r, active) {
+    try {
+      if (active) await updateRoom(r._id, { is_active: true });
+      else await deleteRoom(r._id);
+      load();
+      addToast("success", active ? "Salle réactivée." : "Salle désactivée.");
+    } catch (err) { addToast("error", apiError(err)); }
+  }
+
+  async function doRename(name) {
+    try { await updateRoom(renameCtx._id, { name }); load(); addToast("success", "Salle renommée."); }
+    catch (err) { addToast("error", apiError(err)); }
   }
 
   return (
     <>
-      {error && <div className="alert alert-danger py-2">{error}</div>}
       <form className="card mb-3" onSubmit={add}>
         <div className="card-body">
           <div className="section-label mb-3">Ajouter une salle</div>
@@ -70,28 +134,43 @@ function RoomsTab() {
             <div className="col-md-4"><label className="form-label">Nom</label><input className="form-control" required value={form.name} onChange={set("name")} /></div>
             <div className="col-6 col-md-2"><label className="form-label">Capacité</label><input className="form-control" type="number" min="1" value={form.capacity} onChange={set("capacity")} /></div>
             <div className="col-6 col-md-2"><label className="form-label">Tarif (TND/h)</label><input className="form-control" type="number" min="0" value={form.tarif_horaire} onChange={set("tarif_horaire")} /></div>
-            <div className="col-6 col-md-2"><label className="form-label">Couleur</label><input className="form-control form-control-color w-100" type="color" value={form.color_tag} onChange={set("color_tag")} /></div>
-            <div className="col-6 col-md-2 d-grid"><button className="btn btn-primary"><i className="bi bi-plus-lg me-1" />Ajouter</button></div>
+            <div className="col-md-4">
+              <label className="form-label">Couleur</label>
+              <SwatchPicker value={form.color_tag} onChange={(c) => setForm((f) => ({ ...f, color_tag: c }))} />
+            </div>
+            <div className="col-12">
+              <label className="form-label">Équipements</label>
+              <AmenityPicker value={form.amenities} onChange={(a) => setForm((f) => ({ ...f, amenities: a }))} />
+            </div>
+            <div className="col-md-3 d-grid"><button className="btn btn-primary"><i className="bi bi-plus-lg me-1" />Ajouter la salle</button></div>
           </div>
         </div>
       </form>
 
       <div className="card"><div className="card-body p-0"><div className="table-responsive">
-        <table className="table table-hover align-middle mb-0">
+        <table className="table table-hover align-middle mb-0 cards-md">
           <thead><tr><th className="ps-3">Nom</th><th>Capacité</th><th>Tarif</th><th>Statut</th><th className="pe-3"></th></tr></thead>
           <tbody>
             {rooms.map((r) => (
               <tr key={r._id} style={{ opacity: r.is_active ? 1 : 0.55 }}>
-                <td className="ps-3"><span className="dot me-2" style={{ background: r.color_tag, display: "inline-block" }} /><strong>{r.name}</strong></td>
-                <td>{r.capacity}</td>
-                <td>{formatTND(r.tarif_horaire)}/h</td>
-                <td>{r.is_active ? <span className="badge rounded-pill dotted text-bg-success">Active</span> : <span className="badge rounded-pill dotted text-bg-secondary">Inactive</span>}</td>
-                <td className="pe-3">
+                <td className="ps-3" data-card-title>
+                  <span className="dot me-2" style={{ background: r.color_tag, display: "inline-block" }} /><strong>{r.name}</strong>
+                  {r.amenities?.length > 0 && (
+                    <div className="amenity-tags-mini">
+                      {r.amenities.map((a) => <span key={a} className="amenity-tag" title={a}><i className={`bi ${amenityIcon(a)}`} />{a}</span>)}
+                    </div>
+                  )}
+                </td>
+                <td data-label="Capacité">{r.capacity}</td>
+                <td data-label="Tarif">{formatTND(r.tarif_horaire)}/h</td>
+                <td data-label="Statut">{r.is_active ? <span className="badge rounded-pill dotted text-bg-success">Active</span> : <span className="badge rounded-pill dotted text-bg-secondary">Inactive</span>}</td>
+                <td className="pe-3 cards-actions">
                   <div className="d-flex gap-2">
-                    <button className="btn btn-light btn-sm" onClick={() => rename(r)}><i className="bi bi-pencil me-1" />Renommer</button>
-                    <button className={`btn btn-sm ${r.is_active ? "btn-outline-danger" : "btn-success"}`} onClick={() => toggleActive(r)}>
-                      {r.is_active ? "Désactiver" : "Réactiver"}
-                    </button>
+                    <button className="btn btn-light btn-sm" onClick={() => setRenameCtx(r)}><i className="bi bi-pencil me-1" />Renommer</button>
+                    <button className="btn btn-light btn-sm" onClick={() => openAmen(r)}><i className="bi bi-tools me-1" />Équipements</button>
+                    {r.is_active
+                      ? <button className="btn btn-outline-danger btn-sm" onClick={() => setDeactivateCtx(r)}>Désactiver</button>
+                      : <button className="btn btn-success btn-sm" onClick={() => setReactivateCtx(r)}>Réactiver</button>}
                   </div>
                 </td>
               </tr>
@@ -99,36 +178,69 @@ function RoomsTab() {
           </tbody>
         </table>
       </div></div></div>
+
+      <PromptModal open={Boolean(renameCtx)} title="Renommer la salle" label="Nouveau nom *"
+        initialValue={renameCtx?.name || ""}
+        onConfirm={doRename} onClose={() => setRenameCtx(null)} />
+
+      <ConfirmModal open={Boolean(deactivateCtx)} title="Désactiver la salle"
+        message={`Désactiver ${deactivateCtx?.name} ? Elle n'apparaîtra plus dans les nouvelles réservations.`}
+        confirmLabel="Désactiver" variant="danger"
+        onConfirm={() => doToggleActive(deactivateCtx, false)} onClose={() => setDeactivateCtx(null)} />
+
+      <ConfirmModal open={Boolean(reactivateCtx)} title="Réactiver la salle"
+        message={`Réactiver ${reactivateCtx?.name} ?`}
+        confirmLabel="Réactiver" variant="success"
+        onConfirm={() => doToggleActive(reactivateCtx, true)} onClose={() => setReactivateCtx(null)} />
+
+      <Modal open={Boolean(amenCtx)} onClose={() => setAmenCtx(null)} title={`Équipements — ${amenCtx?.name || ""}`} maxWidth={460}
+        footer={(
+          <>
+            <button className="btn btn-primary" onClick={doSaveAmen}><i className="bi bi-check-lg me-1" />Enregistrer</button>
+            <button className="btn btn-light" onClick={() => setAmenCtx(null)}>Annuler</button>
+          </>
+        )}>
+        <div className="section-label mb-2">Sélectionnez les équipements disponibles</div>
+        <AmenityPicker value={amenDraft} onChange={setAmenDraft} />
+      </Modal>
     </>
   );
 }
 
 /* ---------------- Staff ---------------- */
 function StaffTab() {
+  const { addToast } = useToast();
   const [users, setUsers] = useState([]);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "staff" });
-  const [error, setError] = useState("");
+  const [form, setForm]   = useState({ name: "", email: "", password: "", role: "staff" });
+  const [pwdCtx, setPwdCtx]           = useState(null);
+  const [deactivateCtx, setDeactivateCtx] = useState(null);
+  const [reactivateCtx, setReactivateCtx] = useState(null);
+
   const load = () => getUsers().then(setUsers).catch(() => setUsers([]));
   useEffect(() => { load(); }, []);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   async function add(e) {
-    e.preventDefault(); setError("");
-    try { await createUser(form); setForm({ name: "", email: "", password: "", role: "staff" }); load(); }
-    catch (err) { setError(apiError(err)); }
+    e.preventDefault();
+    try { await createUser(form); setForm({ name: "", email: "", password: "", role: "staff" }); load(); addToast("success", "Compte créé."); }
+    catch (err) { addToast("error", apiError(err)); }
   }
-  async function resetPwd(u) {
-    const password = window.prompt(`Nouveau mot de passe pour ${u.name} (min 6 caractères) :`);
-    if (password && password.length >= 6) { await updateUser(u._id, { password }); window.alert("Mot de passe réinitialisé."); }
+
+  async function doResetPwd(password) {
+    try { await updateUser(pwdCtx._id, { password }); addToast("success", "Mot de passe réinitialisé."); }
+    catch (err) { addToast("error", apiError(err)); }
   }
-  async function toggle(u) {
-    try { u.is_active ? await deactivateUser(u._id) : await updateUser(u._id, { is_active: true }); load(); }
-    catch (err) { setError(apiError(err)); }
+
+  async function doToggle(u, activate) {
+    try {
+      activate ? await updateUser(u._id, { is_active: true }) : await deactivateUser(u._id);
+      load();
+      addToast("success", activate ? "Compte réactivé." : "Compte désactivé.");
+    } catch (err) { addToast("error", apiError(err)); }
   }
 
   return (
     <>
-      {error && <div className="alert alert-danger py-2">{error}</div>}
       <form className="card mb-3" onSubmit={add}>
         <div className="card-body">
           <div className="section-label mb-3">Ajouter un compte</div>
@@ -143,21 +255,21 @@ function StaffTab() {
       </form>
 
       <div className="card"><div className="card-body p-0"><div className="table-responsive">
-        <table className="table table-hover align-middle mb-0">
+        <table className="table table-hover align-middle mb-0 cards-md">
           <thead><tr><th className="ps-3">Nom</th><th>Email</th><th>Rôle</th><th>Statut</th><th className="pe-3"></th></tr></thead>
           <tbody>
             {users.map((u) => (
               <tr key={u._id} style={{ opacity: u.is_active ? 1 : 0.55 }}>
-                <td className="ps-3 fw-semibold">{u.name}</td>
-                <td>{u.email}</td>
-                <td><span className={`badge rounded-pill ${u.role === "admin" ? "text-bg-primary" : "text-bg-light border"}`}>{u.role}</span></td>
-                <td>{u.is_active ? <span className="badge rounded-pill dotted text-bg-success">Actif</span> : <span className="badge rounded-pill dotted text-bg-secondary">Inactif</span>}</td>
-                <td className="pe-3">
+                <td className="ps-3 fw-semibold" data-card-title>{u.name}</td>
+                <td data-label="Email">{u.email}</td>
+                <td data-label="Rôle"><span className={`badge rounded-pill ${u.role === "admin" ? "text-bg-primary" : "text-bg-light border"}`}>{u.role}</span></td>
+                <td data-label="Statut">{u.is_active ? <span className="badge rounded-pill dotted text-bg-success">Actif</span> : <span className="badge rounded-pill dotted text-bg-secondary">Inactif</span>}</td>
+                <td className="pe-3 cards-actions">
                   <div className="d-flex gap-2">
-                    <button className="btn btn-light btn-sm" onClick={() => resetPwd(u)}><i className="bi bi-key me-1" />MDP</button>
-                    <button className={`btn btn-sm ${u.is_active ? "btn-outline-danger" : "btn-success"}`} onClick={() => toggle(u)}>
-                      {u.is_active ? "Désactiver" : "Réactiver"}
-                    </button>
+                    <button className="btn btn-light btn-sm" onClick={() => setPwdCtx(u)}><i className="bi bi-key me-1" />MDP</button>
+                    {u.is_active
+                      ? <button className="btn btn-outline-danger btn-sm" onClick={() => setDeactivateCtx(u)}>Désactiver</button>
+                      : <button className="btn btn-success btn-sm" onClick={() => setReactivateCtx(u)}>Réactiver</button>}
                   </div>
                 </td>
               </tr>
@@ -165,15 +277,31 @@ function StaffTab() {
           </tbody>
         </table>
       </div></div></div>
+
+      <PromptModal open={Boolean(pwdCtx)} title={`Réinitialiser le MDP — ${pwdCtx?.name}`}
+        label="Nouveau mot de passe *" type="text" minLength={6}
+        placeholder="Min. 6 caractères"
+        onConfirm={doResetPwd} onClose={() => setPwdCtx(null)} />
+
+      <ConfirmModal open={Boolean(deactivateCtx)} title="Désactiver le compte"
+        message={`Désactiver le compte de ${deactivateCtx?.name} (${deactivateCtx?.email}) ?`}
+        confirmLabel="Désactiver" variant="danger"
+        onConfirm={() => doToggle(deactivateCtx, false)} onClose={() => setDeactivateCtx(null)} />
+
+      <ConfirmModal open={Boolean(reactivateCtx)} title="Réactiver le compte"
+        message={`Réactiver le compte de ${reactivateCtx?.name} ?`}
+        confirmLabel="Réactiver" variant="success"
+        onConfirm={() => doToggle(reactivateCtx, true)} onClose={() => setReactivateCtx(null)} />
     </>
   );
 }
 
 /* ---------------- Tarifs ---------------- */
 function TarifsTab() {
-  const [rooms, setRooms] = useState([]);
+  const { addToast } = useToast();
+  const [rooms, setRooms]   = useState([]);
   const [drafts, setDrafts] = useState({});
-  const [error, setError] = useState("");
+
   const load = () => getRooms(true).then((rs) => {
     setRooms(rs);
     setDrafts(Object.fromEntries(rs.map((r) => [r._id, r.tarif_horaire])));
@@ -181,24 +309,22 @@ function TarifsTab() {
   useEffect(() => { load(); }, []);
 
   async function save(r) {
-    setError("");
-    try { await updateRoom(r._id, { tarif_horaire: Number(drafts[r._id]) }); load(); }
-    catch (err) { setError(apiError(err)); }
+    try { await updateRoom(r._id, { tarif_horaire: Number(drafts[r._id]) }); load(); addToast("success", "Tarif mis à jour."); }
+    catch (err) { addToast("error", apiError(err)); }
   }
 
   return (
     <>
-      {error && <div className="alert alert-danger py-2">{error}</div>}
       <div className="alert alert-info py-2"><i className="bi bi-info-circle me-1" />Le tarif est figé sur chaque réservation à sa création — modifier ici n'affecte que les futures réservations.</div>
       <div className="card"><div className="card-body p-0"><div className="table-responsive">
-        <table className="table table-hover align-middle mb-0">
+        <table className="table table-hover align-middle mb-0 cards-md">
           <thead><tr><th className="ps-3">Salle</th><th>Tarif horaire (TND)</th><th className="pe-3"></th></tr></thead>
           <tbody>
             {rooms.map((r) => (
               <tr key={r._id}>
-                <td className="ps-3"><span className="dot me-2" style={{ background: r.color_tag, display: "inline-block" }} /><strong>{r.name}</strong></td>
-                <td><input className="form-control" style={{ maxWidth: 160 }} type="number" min="0" step="0.5" value={drafts[r._id] ?? ""} onChange={(e) => setDrafts((d) => ({ ...d, [r._id]: e.target.value }))} /></td>
-                <td className="pe-3"><button className="btn btn-primary btn-sm" disabled={Number(drafts[r._id]) === r.tarif_horaire} onClick={() => save(r)}><i className="bi bi-check-lg me-1" />Enregistrer</button></td>
+                <td className="ps-3" data-card-title><span className="dot me-2" style={{ background: r.color_tag, display: "inline-block" }} /><strong>{r.name}</strong></td>
+                <td data-label="Tarif (TND)"><input className="form-control" style={{ maxWidth: 160 }} type="number" min="0" step="0.5" value={drafts[r._id] ?? ""} onChange={(e) => setDrafts((d) => ({ ...d, [r._id]: e.target.value }))} /></td>
+                <td className="pe-3 cards-actions"><button className="btn btn-primary btn-sm" disabled={Number(drafts[r._id]) === r.tarif_horaire} onClick={() => save(r)}><i className="bi bi-check-lg me-1" />Enregistrer</button></td>
               </tr>
             ))}
           </tbody>

@@ -4,7 +4,7 @@ import { reservationStatusBadge } from "../utils/format.js";
 
 const START_HOUR = 8;
 const END_HOUR = 21;
-const HOUR_PX = 56;
+const HOUR_PX = 64;
 const HOURS = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i);
 
 const isoDay = (d) => {
@@ -91,7 +91,7 @@ export default function DayTimeGrid({ rooms, reservations, day, onSelect }) {
                     }}>
                     {events.map(({ r, s, e, col, cols: n }) => {
                       const top = Math.max(((s - START_HOUR * 60) / 60) * HOUR_PX, 0);
-                      const height = Math.max(((e - s) / 60) * HOUR_PX - 3, 24);
+                      const height = Math.max(((e - s) / 60) * HOUR_PX - 3, 34);
                       const dim = r.status === "checked_out";
                       const widthPct = 100 / n;
                       return (
@@ -105,7 +105,7 @@ export default function DayTimeGrid({ rooms, reservations, day, onSelect }) {
                           }}>
                           <div className="te-time">{r.start_time}–{r.end_time}</div>
                           <div className="te-client">{r.client?.name}</div>
-                          {height > 46 && <div className="te-meta">{r.ref} · {reservationStatusBadge(r.status).label}</div>}
+                          {height > 66 && <div className="te-meta">{r.ref} · {reservationStatusBadge(r.status).label}</div>}
                         </div>
                       );
                     })}

@@ -41,18 +41,31 @@ export const roomsStatus = asyncHandler(async (req, res) => {
     .populate({ path: "checkin_by", select: "name" })
     .sort({ start_time: 1 });
 
+  // All today's reservations (including checked_out) for timeline display
+  const allTodays = await Reservation.find({
+    date: { $gte: start, $lt: end },
+    status: { $nin: ["cancelled"] },
+  }).sort({ start_time: 1 });
+
   const result = rooms.map((room) => {
     const forRoom = todays.filter((r) => String(r.room) === String(room._id));
     const active = forRoom.find((r) => r.status === "checked_in");
     const upcoming = forRoom.find((r) => r.status === "confirmed");
     const r = active || upcoming;
 
+    const today_slots = allTodays
+      .filter((res) => String(res.room) === String(room._id))
+      .map((res) => ({ start_time: res.start_time, end_time: res.end_time, status: res.status, ref: res.ref }));
+
     const base = {
       room_id: room._id,
       name: room.name,
       capacity: room.capacity,
+      tarif_horaire: room.tarif_horaire,
       color_tag: room.color_tag,
+      amenities: room.amenities || [],
       status: active ? "occupee" : upcoming ? "reservee" : "libre",
+      today_slots,
     };
     if (!r) return { ...base, reservation: null };
 

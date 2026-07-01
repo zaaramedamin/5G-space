@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { validationResult } from "express-validator";
 import Reservation from "../models/Reservation.js";
 import { checkConflict } from "../services/conflict.service.js";
@@ -8,7 +9,7 @@ import {
   derivePaymentStatus,
   upsertClient,
 } from "../services/reservations.service.js";
-import { dayRange, minutesUntil } from "../utils/time.js";
+import { dayRange } from "../utils/time.js";
 import { asyncHandler, ApiError } from "../utils/helpers.js";
 
 const POPULATE = [
@@ -27,9 +28,9 @@ function validate(req, res) {
   return true;
 }
 
-// GET /api/reservations  → filters: date, room, status, payment_status
+// GET /api/reservations  → filters: date, room, status, payment_status, page, limit
 export const listReservations = asyncHandler(async (req, res) => {
-  const { date, room, status, payment_status } = req.query;
+  const { date, room, status, payment_status, page, limit: lim } = req.query;
   const filter = {};
   if (date) {
     const { start, end } = dayRange(date);
@@ -39,8 +40,12 @@ export const listReservations = asyncHandler(async (req, res) => {
   if (status) filter.status = status;
   if (payment_status) filter.payment_status = payment_status;
 
-  const list = await Reservation.find(filter).populate(POPULATE).sort({ date: 1, start_time: 1 });
-  res.json(list);
+  const limit = Math.min(Number(lim) || 30, 200);
+  const currentPage = Math.max(Number(page) || 1, 1);
+  const skip = (currentPage - 1) * limit;
+  const total = await Reservation.countDocuments(filter);
+  const data = await Reservation.find(filter).populate(POPULATE).sort({ date: -1, start_time: 1 }).skip(skip).limit(limit);
+  res.json({ data, total, page: currentPage, pages: Math.ceil(total / limit) || 1 });
 });
 
 // GET /api/reservations/:id
@@ -53,27 +58,65 @@ export const getReservation = asyncHandler(async (req, res) => {
 // POST /api/reservations
 export const createReservation = asyncHandler(async (req, res) => {
   if (!validate(req, res)) return;
-  const { client, room, date, start_time, end_time, acompte_paye = 0, notes } = req.body;
+  const { client, room, date, start_time, end_time, acompte_paye = 0, notes, recurrence } = req.body;
 
   await assertClientAllowed(client.cin);
-  const conflict = await checkConflict(room, date, start_time, end_time);
-  if (conflict) throw new ApiError(409, `Conflit avec la réservation ${conflict.ref}.`);
 
-  const { duration_hours, tarif_applied, montant_total } = await computePricing(
-    room, start_time, end_time
-  );
+  // Build the list of dates: one, or weekly occurrences up to `recurrence.until`.
+  const recurring = recurrence?.frequency === "weekly" && recurrence?.until;
+  let dates = [new Date(date)];
+  if (recurring) {
+    dates = [];
+    const until = new Date(recurrence.until);
+    const cursor = new Date(date);
+    for (let i = 0; i < 52 && cursor <= until; i++) {
+      dates.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 7);
+    }
+  }
 
-  const reservation = await Reservation.create({
-    client, room, date, start_time, end_time,
-    duration_hours, tarif_applied, montant_total,
-    acompte_paye, payment_status: derivePaymentStatus(montant_total, acompte_paye),
-    notes, status: "confirmed", created_by: req.user._id,
-  });
+  const { duration_hours, tarif_applied, montant_total } = await computePricing(room, start_time, end_time);
+  const group_id = recurring ? randomUUID() : undefined;
+
+  const created = [];
+  const skipped = [];
+  for (const dt of dates) {
+    const conflict = await checkConflict(room, dt, start_time, end_time);
+    if (conflict) { skipped.push({ date: dt, ref: conflict.ref }); continue; }
+    // A single deposit can't apply to every occurrence, so recurring ones start at 0.
+    const dep = recurring ? 0 : acompte_paye;
+    const r = await Reservation.create({
+      client, room, date: dt, start_time, end_time,
+      duration_hours, tarif_applied, montant_total,
+      acompte_paye: dep, payment_status: derivePaymentStatus(montant_total, dep),
+      notes, status: "confirmed", created_by: req.user._id,
+      recurrence_group: group_id,
+    });
+    created.push(r);
+  }
+
+  if (created.length === 0) {
+    throw new ApiError(409, "Toutes les dates sont en conflit. Aucune réservation créée.");
+  }
   await upsertClient(client);
-  await reservation.populate(POPULATE);
 
-  await logAction(req.user._id, req.user.name, "CREATE_RESERVATION", "reservation", reservation._id, reservation.toObject());
-  res.status(201).json(reservation);
+  if (!recurring) {
+    const single = created[0];
+    await single.populate(POPULATE);
+    await logAction(req.user._id, req.user.name, "CREATE_RESERVATION", "reservation", single._id, single.toObject());
+    return res.status(201).json(single);
+  }
+
+  await logAction(req.user._id, req.user.name, "CREATE_RESERVATION", "reservation", created[0]._id, {
+    ref: created[0].ref, recurring: true, count: created.length, skipped: skipped.length, group_id,
+  });
+  res.status(201).json({
+    recurring: true,
+    created_count: created.length,
+    skipped: skipped.map((s) => ({ date: s.date, conflict_ref: s.ref })),
+    group_id,
+    first_ref: created[0].ref,
+  });
 });
 
 // PUT /api/reservations/:id  → edit only while confirmed
@@ -114,9 +157,6 @@ export const checkin = asyncHandler(async (req, res) => {
   const r = await Reservation.findById(req.params.id);
   if (!r) return res.status(404).json({ message: "Réservation introuvable." });
   if (r.status !== "confirmed") throw new ApiError(409, "Check-in impossible dans cet état.");
-  if (Math.abs(minutesUntil(r.date, r.start_time)) > 15) {
-    throw new ApiError(422, "Check-in autorisé seulement à ±15 min de l'heure de début.");
-  }
 
   r.status = "checked_in";
   r.checkin_by = req.user._id;
@@ -177,4 +217,40 @@ export const updatePayment = asyncHandler(async (req, res) => {
     ref: r.ref, acompte_paye: r.acompte_paye, payment_status: r.payment_status,
   });
   res.json(r);
+});
+
+// GET /api/reservations/:id/ical  → downloadable .ics for personal calendars
+export const ical = asyncHandler(async (req, res) => {
+  const r = await Reservation.findById(req.params.id).populate({ path: "room", select: "name" });
+  if (!r) return res.status(404).json({ message: "Réservation introuvable." });
+
+  const pad = (n) => String(n).padStart(2, "0");
+  const dt = (dateObj, hhmm) => {
+    const d = new Date(dateObj);
+    const [h, m] = String(hhmm).split(":").map(Number);
+    return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(h)}${pad(m)}00`;
+  };
+  const esc = (s) => String(s || "").replace(/([,;\\])/g, "\\$1").replace(/\n/g, "\\n");
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//5G Space//Reservation//FR",
+    "CALSCALE:GREGORIAN",
+    "BEGIN:VEVENT",
+    `UID:${r._id}@5gspace`,
+    `DTSTAMP:${stamp}`,
+    `DTSTART:${dt(r.date, r.start_time)}`,
+    `DTEND:${dt(r.date, r.end_time)}`,
+    `SUMMARY:${esc(`${r.room?.name || "Salle"} — ${r.client?.name || ""}`)}`,
+    `DESCRIPTION:${esc(`Réservation ${r.ref} · ${r.client?.name || ""} · ${r.client?.phone || ""}`)}`,
+    "LOCATION:5G Space Bizerte",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  res.setHeader("Content-Type", "text/calendar; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${r.ref || "reservation"}.ics"`);
+  res.send(ics);
 });
