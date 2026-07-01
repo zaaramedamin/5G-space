@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { useAuth } from "../hooks/useAuth.js";
 import { lookupByCin } from "../api/clients.api.js";
 import { createReservation, updateReservation } from "../api/reservations.api.js";
@@ -100,9 +100,9 @@ export default function ReservationModal({ open, onClose, onSaved, rooms, reserv
   return (
     <AnimatePresence>
       {open && (
-        <motion.div className="ov" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        <m.div className="ov" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-          <motion.form className="ov-card" onSubmit={onSubmit} variants={modalSpring} initial="initial" animate="animate" exit="exit">
+          <m.form className="ov-card" onSubmit={onSubmit} variants={modalSpring} initial="initial" animate="animate" exit="exit">
             <div className="ov-head">
               <h2>{editing ? `Modifier ${reservation.ref}` : "Nouvelle réservation"}</h2>
               <button type="button" className="ov-x" onClick={onClose}>×</button>
@@ -174,8 +174,8 @@ export default function ReservationModal({ open, onClose, onSaved, rooms, reserv
                 {submitting ? <><span className="spinner-border spinner-border-sm" /> Enregistrement…</> : <><i className="bi bi-check-lg" /> Enregistrer</>}
               </button>
             </div>
-          </motion.form>
-        </motion.div>
+          </m.form>
+        </m.div>
       )}
     </AnimatePresence>
   );

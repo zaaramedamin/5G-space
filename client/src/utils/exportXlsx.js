@@ -1,8 +1,9 @@
-import * as XLSX from "xlsx";
 import { formatDate, paymentBadge, reservationStatusBadge } from "./format.js";
 
 // Exports a reservations array to a downloadable .xlsx file.
-export function exportReservationsXlsx(reservations, filename = "reservations") {
+// The xlsx library (~150 KB) is loaded on demand, only when the user exports.
+export async function exportReservationsXlsx(reservations, filename = "reservations") {
+  const XLSX = await import("xlsx");
   const rows = (reservations || []).map((r) => ({
     "Réf": r.ref,
     "Client": r.client?.name,

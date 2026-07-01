@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { getRooms, createRoom, updateRoom, deleteRoom } from "../api/rooms.api.js";
-import { getUsers, createUser, updateUser, deactivateUser } from "../api/users.api.js";
+import { getRooms, createRoom, updateRoom, deleteRoom, hardDeleteRoom } from "../api/rooms.api.js";
+import { getUsers, createUser, updateUser, deactivateUser, deleteUser } from "../api/users.api.js";
 import { apiError } from "../api/axiosInstance.js";
 import { useToast } from "../context/ToastContext.jsx";
 import PromptModal from "../components/PromptModal.jsx";
@@ -88,6 +88,7 @@ function RoomsTab() {
   const [renameCtx, setRenameCtx]     = useState(null);
   const [deactivateCtx, setDeactivateCtx] = useState(null);
   const [reactivateCtx, setReactivateCtx] = useState(null);
+  const [deleteCtx, setDeleteCtx] = useState(null);
   const [amenCtx, setAmenCtx] = useState(null);
   const [amenDraft, setAmenDraft] = useState([]);
 
@@ -108,6 +109,11 @@ function RoomsTab() {
   function openAmen(r) { setAmenDraft(r.amenities || []); setAmenCtx(r); }
   async function doSaveAmen() {
     try { await updateRoom(amenCtx._id, { amenities: amenDraft }); setAmenCtx(null); load(); addToast("success", "Équipements mis à jour."); }
+    catch (err) { addToast("error", apiError(err)); }
+  }
+
+  async function doDelete(r) {
+    try { await hardDeleteRoom(r._id); load(); addToast("success", "Salle supprimée définitivement."); }
     catch (err) { addToast("error", apiError(err)); }
   }
 
@@ -171,6 +177,7 @@ function RoomsTab() {
                     {r.is_active
                       ? <button className="btn btn-outline-danger btn-sm" onClick={() => setDeactivateCtx(r)}>Désactiver</button>
                       : <button className="btn btn-success btn-sm" onClick={() => setReactivateCtx(r)}>Réactiver</button>}
+                    <button className="btn btn-danger btn-sm" onClick={() => setDeleteCtx(r)} title="Supprimer définitivement"><i className="bi bi-trash me-1" />Supprimer</button>
                   </div>
                 </td>
               </tr>
@@ -192,6 +199,11 @@ function RoomsTab() {
         message={`Réactiver ${reactivateCtx?.name} ?`}
         confirmLabel="Réactiver" variant="success"
         onConfirm={() => doToggleActive(reactivateCtx, true)} onClose={() => setReactivateCtx(null)} />
+
+      <ConfirmModal open={Boolean(deleteCtx)} title="Supprimer la salle"
+        message={`Supprimer définitivement « ${deleteCtx?.name} » ? Cette action est irréversible. (Impossible si des réservations utilisent cette salle — désactivez-la plutôt.)`}
+        confirmLabel="Supprimer" variant="danger"
+        onConfirm={() => doDelete(deleteCtx)} onClose={() => setDeleteCtx(null)} />
 
       <Modal open={Boolean(amenCtx)} onClose={() => setAmenCtx(null)} title={`Équipements — ${amenCtx?.name || ""}`} maxWidth={460}
         footer={(
@@ -215,6 +227,7 @@ function StaffTab() {
   const [pwdCtx, setPwdCtx]           = useState(null);
   const [deactivateCtx, setDeactivateCtx] = useState(null);
   const [reactivateCtx, setReactivateCtx] = useState(null);
+  const [deleteCtx, setDeleteCtx] = useState(null);
 
   const load = () => getUsers().then(setUsers).catch(() => setUsers([]));
   useEffect(() => { load(); }, []);
@@ -237,6 +250,11 @@ function StaffTab() {
       load();
       addToast("success", activate ? "Compte réactivé." : "Compte désactivé.");
     } catch (err) { addToast("error", apiError(err)); }
+  }
+
+  async function doDelete(u) {
+    try { await deleteUser(u._id); load(); addToast("success", "Compte supprimé définitivement."); }
+    catch (err) { addToast("error", apiError(err)); }
   }
 
   return (
@@ -270,6 +288,7 @@ function StaffTab() {
                     {u.is_active
                       ? <button className="btn btn-outline-danger btn-sm" onClick={() => setDeactivateCtx(u)}>Désactiver</button>
                       : <button className="btn btn-success btn-sm" onClick={() => setReactivateCtx(u)}>Réactiver</button>}
+                    <button className="btn btn-danger btn-sm" onClick={() => setDeleteCtx(u)} title="Supprimer définitivement"><i className="bi bi-trash me-1" />Supprimer</button>
                   </div>
                 </td>
               </tr>
@@ -292,6 +311,11 @@ function StaffTab() {
         message={`Réactiver le compte de ${reactivateCtx?.name} ?`}
         confirmLabel="Réactiver" variant="success"
         onConfirm={() => doToggle(reactivateCtx, true)} onClose={() => setReactivateCtx(null)} />
+
+      <ConfirmModal open={Boolean(deleteCtx)} title="Supprimer le compte"
+        message={`Supprimer définitivement le compte de ${deleteCtx?.name} (${deleteCtx?.email}) ? Cette action est irréversible. L'historique du journal d'audit est conservé.`}
+        confirmLabel="Supprimer" variant="danger"
+        onConfirm={() => doDelete(deleteCtx)} onClose={() => setDeleteCtx(null)} />
     </>
   );
 }

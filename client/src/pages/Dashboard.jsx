@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { usePolling } from "../hooks/usePolling.js";
 import { useRooms } from "../hooks/useRooms.js";
 import { useToast } from "../context/ToastContext.jsx";
@@ -67,29 +67,29 @@ export default function Dashboard() {
         </button>
       </div>
 
-      <motion.div className="stats" variants={staggerContainer} initial="initial" animate="animate">
+      <m.div className="stats" variants={staggerContainer} initial="initial" animate="animate">
         {TILES.map((t) => (
-          <motion.div key={t.key} className="stat-tile" variants={fadeUpItem} whileHover={{ y: -4 }}>
+          <m.div key={t.key} className="stat-tile" variants={fadeUpItem} whileHover={{ y: -4 }}>
             <div className="stat-tile-ico" style={{ background: t.bg, color: t.fg }}><i className={`bi ${t.icon}`} /></div>
             <div>
               <div className="lbl">{t.label}</div>
               <div className="val">{stats ? (t.money ? formatTND(stats[t.key]) : stats[t.key]) : "—"}</div>
             </div>
-          </motion.div>
+          </m.div>
         ))}
-      </motion.div>
+      </m.div>
 
       <div className="section-label mb-3"><i className="bi bi-broadcast me-1" /> État des salles en temps réel</div>
       {loading && !rooms ? (
         <div className="center-msg"><span className="spinner-border spinner-border-sm me-2" /> Chargement…</div>
       ) : (
-        <motion.div className="room-grid" variants={staggerContainer} initial="initial" animate="animate">
+        <m.div className="room-grid" variants={staggerContainer} initial="initial" animate="animate">
           {rooms?.map((room) => (
-            <motion.div key={room.room_id} variants={fadeUpItem} whileHover={{ y: -4 }}>
+            <m.div key={room.room_id} variants={fadeUpItem} whileHover={{ y: -4 }}>
               <RoomCard room={room} onBook={(r) => setBookRoom(r)} />
-            </motion.div>
+            </m.div>
           ))}
-        </motion.div>
+        </m.div>
       )}
 
       <div className="section-label mb-3 mt-4"><i className="bi bi-clock-history me-1" /> Prochaines réservations (3 h)</div>

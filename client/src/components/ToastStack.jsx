@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { useToast } from "../context/ToastContext.jsx";
 
 const META = {
@@ -15,9 +15,9 @@ export default function ToastStack() {
     <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 9999, display: "flex", flexDirection: "column", gap: 10, pointerEvents: "none" }}>
       <AnimatePresence>
         {toasts.map((t) => {
-          const m = META[t.type] || META.info;
+          const meta = META[t.type] || META.info;
           return (
-            <motion.div key={t.id}
+            <m.div key={t.id}
               initial={{ opacity: 0, x: 70, scale: 0.95 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, x: 70, scale: 0.95 }}
@@ -27,13 +27,13 @@ export default function ToastStack() {
                 padding: "13px 16px", boxShadow: "0 8px 28px rgba(16,24,40,.14)",
                 display: "flex", alignItems: "center", gap: 11,
                 minWidth: 260, maxWidth: 380,
-                borderLeft: `4px solid ${m.color}`,
+                borderLeft: `4px solid ${meta.color}`,
               }}>
-              <i className={`bi ${m.icon}`} style={{ color: m.color, fontSize: 19, flexShrink: 0 }} />
+              <i className={`bi ${meta.icon}`} style={{ color: meta.color, fontSize: 19, flexShrink: 0 }} />
               <span style={{ flex: 1, fontSize: 13.5, fontWeight: 500, color: "#1e293b", lineHeight: 1.4 }}>{t.message}</span>
               <button onClick={() => remove(t.id)}
                 style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 18, padding: 0, lineHeight: 1, flexShrink: 0 }}>×</button>
-            </motion.div>
+            </m.div>
           );
         })}
       </AnimatePresence>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { useAuth } from "../hooks/useAuth.js";
 
 
@@ -44,7 +44,7 @@ export default function Login() {
 
   return (
     <div className="login-wrap">
-      <motion.form className="login-card" onSubmit={onSubmit}
+      <m.form className="login-card" onSubmit={onSubmit}
         initial={{ opacity: 0, y: 24, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ type: "spring", stiffness: 260, damping: 24 }}>
@@ -74,7 +74,7 @@ export default function Login() {
         <button className="btn btn-primary w-100 mt-2 d-flex align-items-center justify-content-center gap-2" disabled={submitting}>
           {submitting ? <><span className="spinner-border spinner-border-sm" /> Connexion…</> : <><i className="bi bi-box-arrow-in-right" /> Se connecter</>}
         </button>
-      </motion.form>
+      </m.form>
     </div>
   );
 }

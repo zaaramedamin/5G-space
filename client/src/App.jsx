@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { Routes, Route, Navigate, Outlet, useOutlet, useLocation } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, LazyMotion, domAnimation, m } from "framer-motion";
 import { useAuth } from "./hooks/useAuth.js";
 import { pageVariants } from "./utils/motion.js";
 import { ToastProvider } from "./context/ToastContext.jsx";
@@ -8,16 +8,23 @@ import Sidebar from "./components/Sidebar.jsx";
 import TopBar from "./components/TopBar.jsx";
 import ToastStack from "./components/ToastStack.jsx";
 import Login from "./pages/Login.jsx";
-import Dashboard from "./pages/Dashboard.jsx";
-import Calendar from "./pages/Calendar.jsx";
-import Reservations from "./pages/Reservations.jsx";
-import Clients from "./pages/Clients.jsx";
-import AuditLog from "./pages/AuditLog.jsx";
-import Settings from "./pages/Settings.jsx";
-import Reports from "./pages/Reports.jsx";
+
+// Pages are code-split: each loads as its own chunk on first visit, keeping the
+// initial bundle small (recharts/jspdf/xlsx never touch the first load).
+const Dashboard    = lazy(() => import("./pages/Dashboard.jsx"));
+const Calendar     = lazy(() => import("./pages/Calendar.jsx"));
+const Reservations = lazy(() => import("./pages/Reservations.jsx"));
+const Clients      = lazy(() => import("./pages/Clients.jsx"));
+const AuditLog     = lazy(() => import("./pages/AuditLog.jsx"));
+const Settings     = lazy(() => import("./pages/Settings.jsx"));
+const Reports      = lazy(() => import("./pages/Reports.jsx"));
 
 function FullPageMessage({ children }) {
   return <div className="center-msg" style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>{children}</div>;
+}
+
+function PageLoader() {
+  return <div className="center-msg" style={{ padding: 60 }}><span className="spinner-border spinner-border-sm me-2" />Chargement…</div>;
 }
 
 function Protected({ adminOnly = false }) {
@@ -50,9 +57,11 @@ function Layout() {
       <div className={`app-main ${collapsed ? "collapsed" : ""}`}>
         <TopBar onToggle={toggle} collapsed={collapsed} />
         <AnimatePresence mode="wait">
-          <motion.div key={location.pathname} variants={pageVariants} initial="initial" animate="animate" exit="exit">
-            {outlet}
-          </motion.div>
+          <m.div key={location.pathname} variants={pageVariants} initial="initial" animate="animate" exit="exit">
+            <Suspense fallback={<PageLoader />}>
+              {outlet}
+            </Suspense>
+          </m.div>
         </AnimatePresence>
       </div>
     </div>
@@ -62,6 +71,7 @@ function Layout() {
 export default function App() {
   return (
     <ToastProvider>
+      <LazyMotion features={domAnimation}>
       <ToastStack />
     <Routes>
       <Route path="/login" element={<Login />} />
@@ -80,6 +90,7 @@ export default function App() {
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+      </LazyMotion>
     </ToastProvider>
   );
 }

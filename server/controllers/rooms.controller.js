@@ -1,5 +1,6 @@
 import { validationResult } from "express-validator";
 import Room from "../models/Room.js";
+import Reservation from "../models/Reservation.js";
 import { logAction } from "../services/audit.service.js";
 import { asyncHandler } from "../utils/helpers.js";
 
@@ -42,14 +43,26 @@ export const updateRoom = asyncHandler(async (req, res) => {
   res.json(room);
 });
 
-// DELETE /api/rooms/:id  → soft delete (admin)
+// DELETE /api/rooms/:id       → soft delete (deactivate)
+// DELETE /api/rooms/:id?hard=1 → permanent delete (only if unused)
 export const deleteRoom = asyncHandler(async (req, res) => {
   const room = await Room.findById(req.params.id);
   if (!room) return res.status(404).json({ message: "Salle introuvable." });
 
+  if (req.query.hard === "1") {
+    const count = await Reservation.countDocuments({ room: room._id });
+    if (count > 0) {
+      return res.status(409).json({
+        message: `Suppression impossible : ${count} réservation(s) utilisent cette salle. Désactivez-la, ou supprimez d'abord ces réservations.`,
+      });
+    }
+    await Room.findByIdAndDelete(room._id);
+    await logAction(req.user._id, req.user.name, "DELETE_ROOM", "room", room._id, { name: room.name, hard: true });
+    return res.json({ message: "Salle supprimée définitivement.", room });
+  }
+
   room.is_active = false;
   await room.save();
-
   await logAction(req.user._id, req.user.name, "DELETE_ROOM", "room", room._id, { name: room.name });
   res.json({ message: "Salle désactivée.", room });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell,
 } from "recharts";
@@ -71,18 +71,18 @@ export default function Reports() {
         <div className="empty-state"><div className="ico"><i className="bi bi-bar-chart" /></div>Aucune donnée sur cette période.</div>
       ) : (
         <>
-          <motion.div className="stats" variants={staggerContainer} initial="initial" animate="animate">
+          <m.div className="stats" variants={staggerContainer} initial="initial" animate="animate">
             {TILES.map((t) => (
-              <motion.div key={t.lbl} className="stat-tile" variants={fadeUpItem}>
+              <m.div key={t.lbl} className="stat-tile" variants={fadeUpItem}>
                 <div className="stat-tile-ico" style={{ background: t.bg, color: t.fg }}><i className={`bi ${t.icon}`} /></div>
                 <div style={{ flex: 1 }}>
                   <div className="lbl">{t.lbl}</div>
                   <div className="val">{t.val}</div>
                   {t.delta !== undefined && <Delta v={t.delta} />}
                 </div>
-              </motion.div>
+              </m.div>
             ))}
-          </motion.div>
+          </m.div>
 
           <div className="rp-grid">
             <div className="card rp-chart">

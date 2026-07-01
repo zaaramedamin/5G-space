@@ -5,6 +5,7 @@ import {
   createUser,
   updateUser,
   deactivateUser,
+  deleteUser,
 } from "../controllers/users.controller.js";
 import { verifyToken, requireAdmin } from "../middleware/auth.middleware.js";
 
@@ -25,5 +26,6 @@ router.post(
 
 router.put("/:id", updateUser);
 router.patch("/:id/deactivate", deactivateUser);
+router.delete("/:id", deleteUser);
 
 export default router;

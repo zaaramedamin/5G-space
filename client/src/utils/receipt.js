@@ -1,8 +1,10 @@
-import { jsPDF } from "jspdf";
 import { formatTND, formatDate, paymentBadge, reservationStatusBadge } from "./format.js";
 
 // Generates and downloads a branded A5 PDF receipt for one reservation.
-export function generateReceipt(r) {
+// jsPDF (~250 KB with deps) is imported on demand so it never weighs down the
+// initial bundle — it only loads the first time a receipt is generated.
+export async function generateReceipt(r) {
+  const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "mm", format: "a5" }); // 148 × 210 mm
   const W = 148;
   const brand = [79, 70, 229];

@@ -96,6 +96,9 @@ export const createReservation = asyncHandler(async (req, res) => {
   }
 
   if (created.length === 0) {
+    if (!recurring && skipped[0]) {
+      throw new ApiError(409, `Conflit avec la réservation ${skipped[0].ref} : cette salle est déjà réservée sur ce créneau.`);
+    }
     throw new ApiError(409, "Toutes les dates sont en conflit. Aucune réservation créée.");
   }
   await upsertClient(client);

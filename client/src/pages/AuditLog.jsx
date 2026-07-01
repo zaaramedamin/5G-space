@@ -20,6 +20,7 @@ const ACTION_META = {
   CREATE_USER:         { label: "Compte créé",         cls: "aud-create",   icon: "bi-person-plus" },
   UPDATE_USER:         { label: "Compte modif.",       cls: "aud-update",   icon: "bi-person-gear" },
   DEACTIVATE_USER:     { label: "Compte désactivé",   cls: "aud-delete",   icon: "bi-person-x" },
+  DELETE_USER:         { label: "Compte supprimé",     cls: "aud-delete",   icon: "bi-person-x-fill" },
 };
 
 const ACTIONS = Object.keys(ACTION_META);

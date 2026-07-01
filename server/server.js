@@ -2,6 +2,9 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+import { existsSync } from "fs";
 
 import { connectDB } from "./config/db.js";
 import { errorHandler, notFound } from "./middleware/error.middleware.js";
@@ -53,6 +56,16 @@ app.use("/api/users", usersRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reports", reportsRoutes);
+
+// ── Serve the compiled React SPA in production (single-origin) ──
+// When client/dist exists, static assets are served and any non-/api route
+// falls back to index.html so client-side routing works on refresh.
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const clientDist = join(__dirname, "../client/dist");
+if (existsSync(clientDist)) {
+  app.use(express.static(clientDist));
+  app.get(/^(?!\/api).*/, (req, res) => res.sendFile(join(clientDist, "index.html")));
+}
 
 app.use(notFound);
 app.use(errorHandler);

@@ -58,3 +58,17 @@ export const deactivateUser = asyncHandler(async (req, res) => {
   await logAction(req.user._id, req.user.name, "DEACTIVATE_USER", "user", user._id, { email: user.email });
   res.json(user);
 });
+
+// DELETE /api/users/:id  (admin) — permanent delete
+// Audit entries keep the staff name (stored as a string), so history is preserved.
+export const deleteUser = asyncHandler(async (req, res) => {
+  if (req.params.id === String(req.user._id)) {
+    return res.status(400).json({ message: "Vous ne pouvez pas supprimer votre propre compte." });
+  }
+  const user = await User.findById(req.params.id);
+  if (!user) return res.status(404).json({ message: "Utilisateur introuvable." });
+
+  await User.findByIdAndDelete(user._id);
+  await logAction(req.user._id, req.user.name, "DELETE_USER", "user", user._id, { name: user.name, email: user.email });
+  res.json({ message: "Compte supprimé définitivement.", user });
+});
