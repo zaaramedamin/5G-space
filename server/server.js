@@ -26,23 +26,16 @@ const app = express();
 // express-rate-limit / req.ip read the real client IP from X-Forwarded-For.
 app.set("trust proxy", 1);
 
-// Allow the configured client origin plus any localhost port in dev
-// (Vite may fall back to 5174, 5175… if 5173 is busy).
-const allowedOrigin = (origin, cb) => {
-  const ok =
-    !origin ||
-    origin === process.env.CLIENT_ORIGIN ||
-    /^https?:\/\/(localhost|127\.0\.0\.1|\d{1,3}(\.\d{1,3}){3}):\d+$/.test(origin);
-  cb(ok ? null : new Error("Not allowed by CORS"), ok);
-};
-// Security headers. CSP is disabled for now so Bootstrap / inline styles keep
-// working; cross-origin resource policy is relaxed so the API can be reached
-// from the Vite dev origin / tunnel.
+// Security headers. CSP is disabled so Bootstrap / inline styles keep working.
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
-app.use(cors({ origin: allowedOrigin }));
+// CORS — allow any origin. Safe here: auth uses Bearer tokens in headers (not
+// cookies), so a foreign site cannot hijack a session. In production the SPA is
+// served from the same origin anyway; this also unblocks Vite's `crossorigin`
+// asset requests, which a strict origin allow-list would otherwise reject.
+app.use(cors());
 app.use(express.json());
 app.use("/api", apiLimiter);
 
