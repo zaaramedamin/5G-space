@@ -47,6 +47,7 @@ async function seed() {
     { name: "Mohamed Trabelsi", phone: "20123456", cin: "09887766", email: "m.trabelsi@example.tn" },
     { name: "Sonia Ben Salah", phone: "55998877", cin: "11223344", email: "sonia.bs@example.tn" },
     { name: "Karim Jelassi", phone: "98765432", cin: "07654321", email: "karim.j@example.tn" },
+    { name: "Zaara Med Amin", phone: "96224796", cin: "11465525", email: "zaaramedamin@gmail.com" },
     { name: "Yassine Gharbi", phone: "22113355", cin: "05551234", is_blacklisted: true, blacklist_reason: "No-show répété + paiement non honoré" },
   ]);
 
